@@ -14,6 +14,7 @@ AI products are easy to demo and difficult to debug. A final response rarely exp
 - **Evaluations** – five deterministic checks with weights: policy compliance (tool ordering and approval rules), tool selection, answer groundedness (every quoted fact must appear in a tool call), latency budget and cost budget. A run passes on score ≥ threshold *and* clean policy and grounding.
 - **Overview** – pass rate, average score and cost, p95 latency against budget, pass rate by prompt version, the most common failure reasons and a breakdown by task × prompt × model.
 - **Project settings** – latency and cost budgets and the pass threshold (all evaluations recalculate), plus validated JSON export/import and a demo reset.
+- **AI review** – on the Evaluations tab, "Explain this run" sends the trace and its evaluation results to a language model, which streams back what happened, the root cause and a concrete prompt fix.
 - Data persists in the browser; the layout becomes a drawer-based flow on small screens.
 
 ## Engineering decisions
@@ -23,6 +24,23 @@ AI products are easy to demo and difficult to debug. A final response rarely exp
 - Pass/fail is derived from evaluations rather than stored, so changing a budget re-scores history immediately.
 - Live runs store their full plan and reveal steps by elapsed time; a single ticker completes them, so reloading mid-run resumes correctly.
 - Radix tabs and dialogs provide accessible views; status always pairs color with an icon and a label.
+
+## AI review: how it works
+
+- `lib/ai/review.ts` turns a run into a compact request (long step inputs and outputs are clipped) and builds the prompt. It is pure TypeScript and unit-tested, including the streaming parser.
+- `worker/ai.ts` exposes `POST /api/ai/review` on the Cloudflare Worker. It validates and size-limits the request, calls an OpenAI-compatible Chat Completions endpoint with `stream: true`, and re-streams only the text deltas to the browser as plain text.
+- The API key never reaches the browser. Provider errors are logged on the server and replaced with a safe message for the user.
+- `components/trace/AiReview.tsx` streams the answer in as it is written, can be stopped mid-answer (AbortController) and resets when you switch runs.
+- Works with OpenAI or Azure OpenAI: set `OPENAI_BASE_URL` to your Azure deployment URL and the Worker switches to the `api-key` header automatically.
+
+### Configure
+
+```bash
+npx wrangler secret put OPENAI_API_KEY      # required
+# optional: OPENAI_MODEL (default gpt-4.1-mini), OPENAI_BASE_URL, OPENAI_API_VERSION (Azure)
+```
+
+For local development put the same variables in a `.dev.vars` file (git-ignored). Without a key the button shows "AI review is not configured on this deployment."
 
 ## Run locally
 

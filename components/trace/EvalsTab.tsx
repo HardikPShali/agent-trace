@@ -4,6 +4,7 @@ import { CircleCheck, CircleX, Settings2 } from "lucide-react";
 import { EVAL_WEIGHTS, evaluateRun } from "@/lib/trace/analysis";
 import { scenarioById } from "@/lib/trace/scenarios";
 import type { Run, Step } from "@/lib/trace/types";
+import { AiReview } from "./AiReview";
 import { Empty } from "./shared";
 import { useTrace } from "./store";
 
@@ -39,6 +40,7 @@ export function EvalsTab({ run, steps, onOpenSettings }: { run: Run; steps: Step
           </article>
         ))}
       </div>
+      <AiReview key={run.id} run={run} steps={steps} />
     </div>
   );
 }
