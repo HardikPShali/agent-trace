@@ -28,19 +28,22 @@ AI products are easy to demo and difficult to debug. A final response rarely exp
 ## AI review: how it works
 
 - `lib/ai/review.ts` turns a run into a compact request (long step inputs and outputs are clipped) and builds the prompt. It is pure TypeScript and unit-tested, including the streaming parser.
-- `worker/ai.ts` exposes `POST /api/ai/review` on the Cloudflare Worker. It validates and size-limits the request, calls an OpenAI-compatible Chat Completions endpoint with `stream: true`, and re-streams only the text deltas to the browser as plain text.
+- `worker/ai.ts` exposes `POST /api/ai/review` on the Cloudflare Worker. It validates and size-limits the request, calls an OpenAI-compatible Chat Completions endpoint (Gemini's free tier by default) with `stream: true`, and re-streams only the text deltas to the browser as plain text.
 - The API key never reaches the browser. Provider errors are logged on the server and replaced with a safe message for the user.
 - `components/trace/AiReview.tsx` streams the answer in as it is written, can be stopped mid-answer (AbortController) and resets when you switch runs.
-- Works with OpenAI or Azure OpenAI: set `OPENAI_BASE_URL` to your Azure deployment URL and the Worker switches to the `api-key` header automatically.
+- Free by default: it uses Google's free Gemini API tier through its OpenAI-compatible endpoint. Set `AI_BASE_URL` to switch to OpenAI, Azure OpenAI (the Worker then uses the `api-key` header) or Groq.
 
-### Configure
+### Configure (free)
+
+1. Create a free Gemini API key in Google AI Studio (https://aistudio.google.com/apikey).
+2. Add it to the Worker:
 
 ```bash
-npx wrangler secret put OPENAI_API_KEY      # required
-# optional: OPENAI_MODEL (default gpt-4.1-mini), OPENAI_BASE_URL, OPENAI_API_VERSION (Azure)
+npx wrangler secret put AI_API_KEY
+# optional: AI_MODEL (default gemini-flash-latest), AI_BASE_URL, AI_API_VERSION (Azure)
 ```
 
-For local development put the same variables in a `.dev.vars` file (git-ignored). Without a key the button shows "AI review is not configured on this deployment."
+For local development put `AI_API_KEY=...` in a `.dev.vars` file (git-ignored). Without a key the button shows "AI review is not configured on this deployment."
 
 ## Run locally
 

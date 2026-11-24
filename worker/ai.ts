@@ -2,20 +2,27 @@
  * POST /api/ai/review: streams an AI review of one agent run.
  *
  * The API key lives only in the Worker's environment (a Cloudflare secret), never in the browser.
- * Works with any OpenAI-compatible Chat Completions endpoint, including Azure OpenAI.
+ * Defaults to Google's free Gemini API tier through its OpenAI-compatible endpoint, and works with
+ * any other OpenAI-compatible provider (OpenAI, Azure OpenAI, Groq) by changing AI_BASE_URL.
  */
 import { MAX_REQUEST_BYTES, SYSTEM_PROMPT, parseSseChunk, reviewUserMessage, type ReviewRequest } from "../lib/ai/review.ts";
 
 export interface AiEnv {
-  /** Required. Set with `npx wrangler secret put OPENAI_API_KEY`. */
-  OPENAI_API_KEY?: string;
-  /** Optional. Defaults to https://api.openai.com/v1. For Azure: https://<resource>.openai.azure.com/openai/deployments/<deployment> */
-  OPENAI_BASE_URL?: string;
-  /** Optional. Defaults to gpt-4.1-mini. */
-  OPENAI_MODEL?: string;
+  /** Required. A free Gemini key from Google AI Studio, or any provider's key. `npx wrangler secret put AI_API_KEY` */
+  AI_API_KEY?: string;
+  /** Optional. Defaults to Gemini's OpenAI-compatible endpoint. */
+  AI_BASE_URL?: string;
+  /** Optional. Defaults to gemini-flash-latest. */
+  AI_MODEL?: string;
   /** Optional, Azure only, e.g. 2024-10-21. */
-  OPENAI_API_VERSION?: string;
+  AI_API_VERSION?: string;
+  /** Older names, still accepted. */
+  OPENAI_API_KEY?: string;
+  OPENAI_BASE_URL?: string;
+  OPENAI_MODEL?: string;
 }
+
+export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8" } });
@@ -27,7 +34,8 @@ function isReviewRequest(value: unknown): value is ReviewRequest {
 
 export async function handleAiReview(request: Request, env: AiEnv): Promise<Response> {
   if (request.method !== "POST") return json(405, { error: "Use POST." });
-  if (!env.OPENAI_API_KEY) return json(503, { error: "AI review is not configured on this deployment." });
+  const apiKey = env.AI_API_KEY || env.OPENAI_API_KEY;
+  if (!apiKey) return json(503, { error: "AI review is not configured on this deployment." });
 
   const raw = await request.text();
   if (raw.length > MAX_REQUEST_BYTES) return json(413, { error: "This run is too large to review." });
@@ -39,22 +47,25 @@ export async function handleAiReview(request: Request, env: AiEnv): Promise<Resp
   }
   if (!isReviewRequest(body)) return json(400, { error: "Missing run details." });
 
-  const base = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const base = (env.AI_BASE_URL || env.OPENAI_BASE_URL || GEMINI_BASE_URL).replace(/\/$/, "");
   const isAzure = base.includes(".azure.com");
-  const url = `${base}/chat/completions${isAzure ? `?api-version=${env.OPENAI_API_VERSION || "2024-10-21"}` : ""}`;
+  const isGemini = base.includes("generativelanguage.googleapis.com");
+  const url = `${base}/chat/completions${isAzure ? `?api-version=${env.AI_API_VERSION || "2024-10-21"}` : ""}`;
   const headers: Record<string, string> = { "content-type": "application/json" };
-  if (isAzure) headers["api-key"] = env.OPENAI_API_KEY;
-  else headers.authorization = `Bearer ${env.OPENAI_API_KEY}`;
+  if (isAzure) headers["api-key"] = apiKey;
+  else headers.authorization = `Bearer ${apiKey}`;
 
   const upstream = await fetch(url, {
     method: "POST",
     headers,
     signal: request.signal,
     body: JSON.stringify({
-      model: env.OPENAI_MODEL || "gpt-4.1-mini",
+      model: env.AI_MODEL || env.OPENAI_MODEL || "gemini-flash-latest",
+      // Gemini models think before answering; keep that short so the token budget goes to the answer.
+      ...(isGemini ? { reasoning_effort: "low" } : {}),
       stream: true,
       temperature: 0.2,
-      max_tokens: 450,
+      max_tokens: 900,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: reviewUserMessage(body) },
