@@ -46,6 +46,14 @@ export async function handleAiReview(request: Request, env: AiEnv): Promise<Resp
     return json(400, { error: "Invalid JSON." });
   }
   if (!isReviewRequest(body)) return json(400, { error: "Missing run details." });
+  // Build the prompt up front: a request that passes the shape check but has malformed items
+  // must get a clear 400, not crash the function.
+  let userMessage: string;
+  try {
+    userMessage = reviewUserMessage(body);
+  } catch {
+    return json(400, { error: "Malformed request." });
+  }
 
   const base = (env.AI_BASE_URL || env.OPENAI_BASE_URL || GEMINI_BASE_URL).replace(/\/$/, "");
   const isAzure = base.includes(".azure.com");
@@ -68,7 +76,7 @@ export async function handleAiReview(request: Request, env: AiEnv): Promise<Resp
       max_tokens: 900,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: reviewUserMessage(body) },
+        { role: "user", content: userMessage },
       ],
     }),
   });

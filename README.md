@@ -36,14 +36,10 @@ AI products are easy to demo and difficult to debug. A final response rarely exp
 ### Configure (free)
 
 1. Create a free Gemini API key in Google AI Studio (https://aistudio.google.com/apikey).
-2. Add it to the Worker:
+2. **Vercel (live site):** in the project's Settings → Environment Variables, add `AI_API_KEY` with that key, then redeploy. `api/ai/review.ts` is a Vercel Edge Function that serves `POST /api/ai/review` with the same handler as the Worker.
+3. **Cloudflare (optional):** `npx wrangler secret put AI_API_KEY`.
 
-```bash
-npx wrangler secret put AI_API_KEY
-# optional: AI_MODEL (default gemini-flash-latest), AI_BASE_URL, AI_API_VERSION (Azure)
-```
-
-For local development put `AI_API_KEY=...` in a `.dev.vars` file (git-ignored). Without a key the button shows "AI review is not configured on this deployment."
+Optional variables: `AI_MODEL` (default `gemini-flash-latest`), `AI_BASE_URL`, `AI_API_VERSION` (Azure). For local development put `AI_API_KEY=...` in a `.dev.vars` file (git-ignored). Without a key the feature shows a "not configured" message.
 
 ## Run locally
 
